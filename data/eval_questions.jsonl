@@ -1,0 +1,12 @@
+{"question": "Ce vulnerabilități Ivanti Connect Secure sunt în CISA KEV și pe care ar trebui să o patch-uiesc prima?", "type": "filter+prioritize", "expect": ["CVE-2025-0282", "CVE-2025-22457", "CVE-2026-104935"]}
+{"question": "Explică-mi CVE-2026-21589: ce produse afectează și ce trebuie să fac?", "type": "lookup", "expect": ["CVE-2026-21589"]}
+{"question": "What is CVE-2021-44228 and is it known to be exploited in the wild?", "type": "live fetch", "expect": ["CVE-2021-44228"]}
+{"question": "Câte CVE-uri Fortinet din dataset sunt exploatate activ (CISA KEV)? Dă-mi lista.", "type": "global/aggregate", "expect": ["CVE-2025-24472", "CVE-2025-25249", "CVE-2025-25257", "CVE-2025-32756", "CVE-2025-58034", "CVE-2025-59718", "CVE-2025-64446", "CVE-2025-68686", "CVE-2026-104286", "CVE-2026-21643", "CVE-2026-24858", "CVE-2026-25089", "CVE-2026-35616", "CVE-2026-39808"]}
+{"question": "Which Cisco Adaptive Security Appliance (ASA) vulnerabilities are in CISA KEV?", "type": "filter", "expect": ["CVE-2025-20333", "CVE-2025-20362", "CVE-2026-20349"]}
+{"question": "Am trei CVE-uri pe servere: CVE-2025-20333, CVE-2026-1603 și CVE-2025-24472. În ce ordine le patch-uiesc și de ce?", "type": "prioritize", "expect": ["CVE-2025-20333", "CVE-2026-1603", "CVE-2025-24472"]}
+{"question": "Care sunt cele mai frecvente tipuri de vulnerabilități raportate pentru kernelul Linux în 2026?", "type": "global/aggregate", "expect": []}
+{"question": "Find SQL injection vulnerabilities in WordPress booking or reservation plugins published since 2026-06-01.", "type": "search", "expect": []}
+{"question": "Ce alte vulnerabilități sunt înrudite cu CVE-2025-25257 (FortiWeb)?", "type": "graph", "expect": ["CVE-2025-25257"]}
+{"question": "Is there any known vulnerability in the SmartKettle XZ-9000 firmware?", "type": "unanswerable", "expect": []}
+{"question": "Compară vulnerabilitățile Citrix NetScaler și Palo Alto PAN-OS din 2026 aflate în CISA KEV.", "type": "multi-part", "expect": ["CVE-2026-3055", "CVE-2026-8452", "CVE-2026-19490", "CVE-2026-88771", "CVE-2026-88772", "CVE-2026-88779", "CVE-2026-0257", "CVE-2026-0300", "CVE-2026-0322"]}
+{"question": "What are the critical Microsoft vulnerabilities from 2026 with the highest EPSS score?", "type": "global/aggregate", "expect": []}

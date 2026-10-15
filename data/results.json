@@ -1,0 +1,112 @@
+{
+ "classification": {
+  "vuln_class, random split": {
+   "n_test": 21877,
+   "accuracy": 0.881,
+   "macro_f1": 0.88
+  },
+  "vuln_class, grouped split": {
+   "n_test": 21876,
+   "accuracy": 0.879,
+   "macro_f1": 0.879
+  },
+  "severity, grouped split": {
+   "n_test": 22727,
+   "accuracy": 0.695,
+   "macro_f1": 0.553
+  },
+  "gold: NVD/CNA label": {
+   "n_test": 144,
+   "accuracy": 0.951,
+   "macro_f1": 0.948
+  },
+  "gold: TF-IDF + LinearSVC": {
+   "n_test": 144,
+   "accuracy": 0.882,
+   "macro_f1": 0.885
+  },
+  "gold: LLM gpt-4.1-nano": {
+   "n_test": 144,
+   "accuracy": 0.889,
+   "macro_f1": 0.888,
+   "usd_per_1k": 0.053,
+   "sec_per_call": 0.75
+  },
+  "gold: LLM gpt-4.1-mini": {
+   "n_test": 144,
+   "accuracy": 0.875,
+   "macro_f1": 0.857,
+   "usd_per_1k": 0.215,
+   "sec_per_call": 0.95
+  },
+  "gold: LLM gpt-5-mini": {
+   "n_test": 144,
+   "accuracy": 0.938,
+   "macro_f1": 0.936,
+   "usd_per_1k": 0.472,
+   "sec_per_call": 2.29
+  }
+ },
+ "summaries": {
+  "summaries of CISA KEV CVEs": {
+   "n": 15,
+   "grounded": 4.867,
+   "complete": 4.733,
+   "useful": 4.333,
+   "passed": 1.0,
+   "usd_per_summary": 0.001,
+   "sec_per_summary": 2.423
+  }
+ },
+ "retrieval": {
+  "bm25": {
+   "n": 191.0,
+   "recall@1": 0.738,
+   "recall@5": 0.895,
+   "recall@10": 0.937,
+   "mrr@10": 0.802
+  },
+  "dense": {
+   "n": 191.0,
+   "recall@1": 0.822,
+   "recall@5": 0.974,
+   "recall@10": 0.979,
+   "mrr@10": 0.881
+  },
+  "hybrid": {
+   "n": 191.0,
+   "recall@1": 0.801,
+   "recall@5": 0.948,
+   "recall@10": 0.979,
+   "mrr@10": 0.868
+  }
+ },
+ "agents": {
+  "single agent": {
+   "n": 12,
+   "grounded": 4.833,
+   "complete": 4.667,
+   "useful": 4.5,
+   "passed": 0.833,
+   "ungrounded_ids": 0.0,
+   "expected_id_recall": 0.944,
+   "usd": 0.002,
+   "llm_seconds": 5.364,
+   "rounds": null,
+   "first_draft_min_score": null
+  },
+  "orchestrator + judge": {
+   "n": 12,
+   "grounded": 4.75,
+   "complete": 4.417,
+   "useful": 4.333,
+   "passed": 0.917,
+   "ungrounded_ids": 0.0,
+   "expected_id_recall": 0.958,
+   "usd": 0.014,
+   "llm_seconds": 55.878,
+   "rounds": 1.5,
+   "first_draft_min_score": 3.667
+  }
+ }
+}
