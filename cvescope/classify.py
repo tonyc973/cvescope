@@ -5,9 +5,9 @@ Baseline: TF-IDF + linear SVM. LLM: zero-shot with a structured (schema-validate
 """
 from typing import Literal
 
-import numpy as np
 from pydantic import BaseModel, Field
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import GroupShuffleSplit, ShuffleSplit
 from sklearn.pipeline import make_pipeline
 from sklearn.svm import LinearSVC
@@ -59,10 +59,6 @@ def llm_label(description: str, model: str = MODEL) -> Label:
     ], Label, model=model)
 
 
-def macro_f1(y_true, y_pred) -> float:
-    from sklearn.metrics import f1_score
-    return round(float(f1_score(y_true, y_pred, average="macro", zero_division=0)), 3)
-
-
-def accuracy(y_true, y_pred) -> float:
-    return round(float(np.mean(np.array(y_true) == np.array(y_pred))), 3)
+def scores(y_true, y_pred) -> dict:
+    return {"accuracy": round(float(accuracy_score(y_true, y_pred)), 3),
+            "macro_f1": round(float(f1_score(y_true, y_pred, average="macro", zero_division=0)), 3)}

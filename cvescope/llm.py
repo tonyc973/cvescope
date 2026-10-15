@@ -64,7 +64,8 @@ def memo(payload: dict, fn):
 def chat(messages: list[dict], model: str = MODEL, tools: list | None = None) -> dict:
     """Returns the assistant message as a dict (content and/or tool_calls), ready to append to `messages`."""
     def call():
-        r = client().chat.completions.create(model=model, messages=messages, **({"tools": tools} if tools else {}))
+        extra = {"tools": tools} if tools else {}  # no tools -> leave the key out of the request
+        r = client().chat.completions.create(model=model, messages=messages, **extra)
         return r.choices[0].message.model_dump(exclude_none=True, include={"role", "content", "tool_calls"}), r.usage
     return memo({"model": model, "messages": messages, "tools": tools}, call)
 

@@ -112,6 +112,11 @@ If the tools return nothing relevant, say so plainly. Answer in the user's langu
 When the user must act, prioritize: in CISA KEV first, then high EPSS, then CVSS."""
 
 
+def ungrounded(answer: str, evidence: set, question: str) -> list[str]:
+    """Grounding check: CVE ids in the answer that come neither from a tool result nor from the question."""
+    return sorted(set(CVE_RE.findall(answer)) - evidence - set(CVE_RE.findall(question)))
+
+
 def run(question: str, history: list | None = None, model: str = MODEL, max_steps: int = 8) -> dict:
     messages = [{"role": "system", "content": SYSTEM.format(today=datetime.date.today())},
                 *(history or []), {"role": "user", "content": question}]
@@ -133,10 +138,8 @@ def run(question: str, history: list | None = None, model: str = MODEL, max_step
             trace.append({"tool": name, "args": args, "result": text[:300]})
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": text})
     answer = msg.get("content") or "(no answer: step limit reached)"
-    # grounding check: every CVE id in the answer must come from a tool result (or from the question itself)
-    ungrounded = set(CVE_RE.findall(answer)) - evidence - set(CVE_RE.findall(question))
-    return {"answer": answer, "trace": trace, "evidence": sorted(evidence), "ungrounded": sorted(ungrounded),
-            "messages": messages}
+    return {"answer": answer, "trace": trace, "evidence": sorted(evidence),
+            "ungrounded": ungrounded(answer, evidence, question), "messages": messages}
 
 
 if __name__ == "__main__":

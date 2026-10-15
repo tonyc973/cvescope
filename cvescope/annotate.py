@@ -11,7 +11,7 @@ from collections import Counter
 from sklearn.metrics import cohen_kappa_score
 
 from . import DATA, records
-from .classify import accuracy, llm_label, split
+from .classify import llm_label, scores, split
 from .dataset import CLASSES
 
 GOLD = DATA / "gold" / "gold.csv"
@@ -52,12 +52,12 @@ def report() -> dict:
     rows = gold()
     nvd, llm = [r["nvd_class"] for r in rows], [r["llm_class"] for r in rows]
     done = [r for r in rows if r["gold_class"]]
-    out = {"n": len(rows), "raw_agreement": accuracy(nvd, llm), "cohen_kappa": round(cohen_kappa_score(nvd, llm), 3),
+    out = {"n": len(rows), "raw_agreement": scores(nvd, llm)["accuracy"], "cohen_kappa": round(cohen_kappa_score(nvd, llm), 3),
            "adjudicated": len(done)}
     if done:
         g = [r["gold_class"] for r in done]
-        out |= {"nvd_vs_gold": accuracy([r["nvd_class"] for r in done], g),
-                "llm_vs_gold": accuracy([r["llm_class"] for r in done], g),
+        out |= {"nvd_vs_gold": scores([r["nvd_class"] for r in done], g)["accuracy"],
+                "llm_vs_gold": scores([r["llm_class"] for r in done], g)["accuracy"],
                 "nvd_errors": Counter(f"{r['nvd_class']}->{r['gold_class']}" for r in done
                                       if r["nvd_class"] != r["gold_class"]).most_common()}
     return out

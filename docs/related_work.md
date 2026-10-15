@@ -32,7 +32,7 @@ Pe scurt: ce s-a mai făcut, ce preluăm și prin ce diferă CVEScope.
 | **Broder**, *On the Resemblance and Containment of Documents*, 1997; **Leskovec, Rajaraman & Ullman**, *Mining of Massive Datasets*, cap. 3 | MinHash + LSH pentru aproape-duplicate |
 | **Gebru et al.**, *Datasheets for Datasets*, Communications of the ACM, 2021 | [dataset_card.md](dataset_card.md) |
 | **Kapoor & Narayanan**, *Leakage and the Reproducibility Crisis in Machine-Learning-Based Science*, Patterns, 2023 | separarea pe grupuri împotriva scurgerilor între train și test |
-| **Cormen et al.**, *Introduction to Algorithms*, ed. 4 | union-find, selecție în O(n), memoizare |
+| **Cormen et al.**, *Introduction to Algorithms*, ed. 4 | componente conexe, selecție în O(n), memoizare |
 
 ## Ce aduce CVEScope în plus
 

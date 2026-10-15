@@ -26,6 +26,7 @@ class Verdict(BaseModel):
     useful: int = Field(description="1-5: clear, concise, prioritized when the user must act")
 
 
+RUBRIC = ("grounded", "complete", "useful")
 PASS = 4  # stop criterion: every rubric score >= PASS and no ungrounded CVE id
 
 
@@ -37,8 +38,8 @@ def judge(question: str, answer: str, evidence: str, model: str = JUDGE_MODEL) -
     ], Verdict, model=model)
 
 
-def passed(v: Verdict, ungrounded: list) -> bool:
-    return min(v.grounded, v.complete, v.useful) >= PASS and not ungrounded
+def passed(verdict: dict, ungrounded: list = ()) -> bool:
+    return min(verdict[k] for k in RUBRIC) >= PASS and not ungrounded
 
 
 def tool_outputs(result: dict) -> str:
@@ -47,7 +48,9 @@ def tool_outputs(result: dict) -> str:
 
 def orchestrate(question: str, max_rounds: int = 3, model: str = MODEL) -> dict:
     trace, t0 = [], time.time()
-    log = lambda role, **kw: trace.append({"role": role, "t": round(time.time() - t0, 1), **kw})
+
+    def log(role, **kw):
+        trace.append({"role": role, "t": round(time.time() - t0, 1), **kw})
 
     plan = structured([{"role": "user", "content": "Split this vulnerability-triage question into 1-3 "
                         f"self-contained sub-questions that can be researched independently:\n{question}"}],
@@ -60,8 +63,6 @@ def orchestrate(question: str, max_rounds: int = 3, model: str = MODEL) -> dict:
         runs = list(ex.map(lambda q: agent.run(q, model=model), subtasks))
     for q, r in zip(subtasks, runs):
         log("researcher", subtask=q, tools=[t["tool"] for t in r["trace"]], answer=r["answer"])
-    evidence = "\n".join(tool_outputs(r) for r in runs)
-    ids = set().union(*(r["evidence"] for r in runs))
 
     if len(runs) == 1:
         answer = runs[0]["answer"]
@@ -73,21 +74,21 @@ def orchestrate(question: str, max_rounds: int = 3, model: str = MODEL) -> dict:
                       model=model)["content"]
         log("writer", answer=answer)
 
-    for round_ in range(1, max_rounds + 1):
-        ungrounded = sorted(set(agent.CVE_RE.findall(answer)) - ids - set(agent.CVE_RE.findall(question)))
-        verdict = judge(question, answer, evidence)
-        log("judge", round=round_, ungrounded=ungrounded, **verdict.model_dump())
-        if passed(verdict, ungrounded) or round_ == max_rounds:
+    for round_ in range(1, max_rounds + 1):  # every run so far (revisions included) counts as evidence
+        bad_ids = agent.ungrounded(answer, set().union(*(r["evidence"] for r in runs)), question)
+        verdict = judge(question, answer, "\n".join(tool_outputs(r) for r in runs)).model_dump()
+        log("judge", round=round_, ungrounded=bad_ids, **verdict)
+        if passed(verdict, bad_ids) or round_ == max_rounds:
             break
-        fix = (f"{question}\n\nA reviewer rejected this draft answer:\n{answer}\n\nFeedback: {verdict.feedback}\n"
-               f"Ids not supported by evidence: {ungrounded or 'none'}.\nResearch again where needed and write a "
+        fix = (f"{question}\n\nA reviewer rejected this draft answer:\n{answer}\n\nFeedback: {verdict['feedback']}\n"
+               f"Ids not supported by evidence: {bad_ids or 'none'}.\nResearch again where needed and write a "
                "corrected final answer.")
-        r = agent.run(fix, model=model)
-        answer, evidence, ids = r["answer"], evidence + "\n" + tool_outputs(r), ids | set(r["evidence"])
-        log("researcher", subtask="revision", tools=[t["tool"] for t in r["trace"]], answer=answer)
+        runs.append(agent.run(fix, model=model))
+        answer = runs[-1]["answer"]
+        log("researcher", subtask="revision", tools=[t["tool"] for t in runs[-1]["trace"]], answer=answer)
 
-    return {"answer": answer, "trace": trace, "rounds": round_, "verdict": verdict.model_dump(),
-            "passed": passed(verdict, ungrounded), "ungrounded": ungrounded}
+    return {"answer": answer, "trace": trace, "rounds": round_, "verdict": verdict,
+            "passed": passed(verdict, bad_ids), "ungrounded": bad_ids}
 
 
 if __name__ == "__main__":

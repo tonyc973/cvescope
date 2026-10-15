@@ -13,7 +13,7 @@ import numpy as np
 
 from . import DATA, ROOT, agent, records, team
 from .annotate import gold
-from .classify import accuracy, baseline, llm_label, macro_f1, split
+from .classify import baseline, llm_label, scores, split
 from .llm import JUDGE_MODEL, MODEL, USAGE
 from .summarize import evidence, summarize
 from .synth import QUESTIONS
@@ -31,8 +31,10 @@ def spend(fn):
     return out, USAGE["usd"] - before["usd"], USAGE["seconds"] - before["seconds"]
 
 
-def scores(y_true, y_pred) -> dict:
-    return {"accuracy": accuracy(y_true, y_pred), "macro_f1": macro_f1(y_true, y_pred)}
+def avg(rows: list[dict], key: str):
+    """Mean of rows[key], skipping rows that don't have it; None if no row has it."""
+    vals = [r[key] for r in rows if r.get(key) is not None]
+    return round(float(np.mean(vals)), 3) if vals else None
 
 
 def retrieval() -> dict:
@@ -74,41 +76,46 @@ def classification() -> dict:
     return out
 
 
+def row(q: dict, system: str, answer: str, verdict: dict, ungrounded: list, usd: float, secs: float, **extra) -> dict:
+    expect = q.get("expect") or []
+    return {"question": q["question"], "system": system, "answer": answer, "verdict": verdict, "ungrounded": ungrounded,
+            **{k: verdict[k] for k in team.RUBRIC}, "passed": team.passed(verdict, ungrounded),
+            "ungrounded_ids": len(ungrounded),
+            "expected_id_recall": sum(i in answer for i in expect) / len(expect) if expect else None,
+            "usd": usd, "llm_seconds": secs, **extra}
+
+
 def agents() -> dict:
-    qs = [json.loads(line) for line in AGENT_QUESTIONS.read_text().splitlines()]
-    per_q, agg = [], {"single agent": [], "orchestrator + judge": []}
-    for q in qs:
-        single, usd1, s1 = spend(lambda: agent.run(q["question"]))
-        v1 = team.judge(q["question"], single["answer"], team.tool_outputs(single))
-        multi, usd2, s2 = spend(lambda: team.orchestrate(q["question"]))
+    """Every question goes through both systems; both are scored with the same judge and rubric."""
+    rows = []
+    for q in map(json.loads, AGENT_QUESTIONS.read_text().splitlines()):
+        single, usd, secs = spend(lambda: agent.run(q["question"]))
+        verdict = team.judge(q["question"], single["answer"], team.tool_outputs(single)).model_dump()
+        rows.append(row(q, "single agent", single["answer"], verdict, single["ungrounded"], usd, secs))
+
+        multi, usd, secs = spend(lambda: team.orchestrate(q["question"]))
         first = next(t for t in multi["trace"] if t["role"] == "judge")
-        for name, ans, v, ung, usd, secs, extra in (
-                ("single agent", single["answer"], v1.model_dump(), single["ungrounded"], usd1, s1, {}),
-                ("orchestrator + judge", multi["answer"], multi["verdict"], multi["ungrounded"], usd2, s2,
-                 {"rounds": multi["rounds"], "first_draft_min_score": min(first[k] for k in ("grounded", "complete", "useful"))})):
-            hit = [i for i in q.get("expect", []) if i in ans]
-            agg[name].append({"grounded": v["grounded"], "complete": v["complete"], "useful": v["useful"],
-                              "passed": min(v["grounded"], v["complete"], v["useful"]) >= team.PASS and not ung,
-                              "ungrounded_ids": len(ung), "expected_id_recall": len(hit) / len(q["expect"]) if q.get("expect") else None,
-                              "usd": usd, "llm_seconds": secs, **extra})
-            per_q.append({"question": q["question"], "system": name, "answer": ans, "verdict": v, "ungrounded": ung, **extra})
-    (DATA / "agent_eval.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in per_q))
-    mean = lambda rows, k: round(float(np.mean([r[k] for r in rows if r.get(k) is not None])), 3) if any(
-        r.get(k) is not None for r in rows) else None
-    keys = ["grounded", "complete", "useful", "passed", "ungrounded_ids", "expected_id_recall", "usd", "llm_seconds",
-            "rounds", "first_draft_min_score"]
-    return {name: {"n": len(rows), **{k: mean(rows, k) for k in keys}} for name, rows in agg.items()}
+        rows.append(row(q, "orchestrator + judge", multi["answer"], multi["verdict"], multi["ungrounded"], usd, secs,
+                        rounds=multi["rounds"], first_draft_min_score=min(first[k] for k in team.RUBRIC)))
+    (DATA / "agent_eval.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    keys = [*team.RUBRIC, "passed", "ungrounded_ids", "expected_id_recall", "usd", "llm_seconds", "rounds",
+            "first_draft_min_score"]
+    out = {}
+    for system in dict.fromkeys(r["system"] for r in rows):
+        mine = [r for r in rows if r["system"] == system]
+        out[system] = {"n": len(mine), **{k: avg(mine, k) for k in keys}}
+    return out
 
 
 def summaries(n: int = 15) -> dict:
     rows = []
     for r in random.Random(2).sample([r for r in records() if r["kev"]], n):
         s, usd, secs = spend(lambda: summarize(r))
-        v = team.judge(f"Summarize {r['id']} for a sysadmin.", s.model_dump_json(), evidence(r))
-        rows.append(v.model_dump() | {"passed": min(v.grounded, v.complete, v.useful) >= team.PASS, "usd": usd, "secs": secs})
-    mean = lambda k: round(float(np.mean([x[k] for x in rows])), 3)
-    return {"summaries of CISA KEV CVEs": {"n": n, **{k: mean(k) for k in ("grounded", "complete", "useful", "passed")},
-                                           "usd_per_summary": round(mean("usd"), 5), "sec_per_summary": mean("secs")}}
+        verdict = team.judge(f"Summarize {r['id']} for a sysadmin.", s.model_dump_json(), evidence(r)).model_dump()
+        rows.append(verdict | {"passed": team.passed(verdict), "usd": usd, "secs": secs})
+    return {"summaries of CISA KEV CVEs": {"n": n, **{k: avg(rows, k) for k in (*team.RUBRIC, "passed")},
+                                           "usd_per_summary": round(avg(rows, "usd"), 5),
+                                           "sec_per_summary": avg(rows, "secs")}}
 
 
 def table(section: dict) -> str:

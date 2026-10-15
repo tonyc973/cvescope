@@ -71,7 +71,7 @@ Am folosit feed-urile anuale și nu API-ul REST, pentru că API-ul fără cheie 
 2. Normalizăm (`parse_nvd`): CWE-uri unice și sortate; un singur CVSS, după regula de prioritate de mai sus; produse `vendor:produs` din CPE și din blocul `affected`. Placeholder-ele `n/a` și `unknown` ca produs sunt eliminate, altfel ar fi legat mii de CVE-uri în graf.
 3. Etichetăm `vuln_class` din CWE (taxonomia v1, [ghid](annotation_guidelines.md)).
 4. Îmbogățim cu KEV și EPSS, prin join pe ID.
-5. Deduplicăm cu MinHash (128 de permutări) + LSH (16 benzi × 8 rânduri) + union-find. Rezultatul e câmpul `cluster`.
+5. Deduplicăm cu MinHash (128 de permutări) + LSH (16 benzi × 8 rânduri) + componente conexe în graful perechilor similare. Rezultatul e câmpul `cluster`.
 
 Totul e determinist (seed fix); `make data` reproduce fișierul în aproximativ un minut.
 

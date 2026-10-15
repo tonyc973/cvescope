@@ -36,8 +36,8 @@ Detaliile sunt în [dataset_card.md](dataset_card.md). Câteva decizii de ingine
 - **MinHash + LSH** pentru aproape-duplicate, după Broder (1997) și Leskovec et al., *Mining of Massive Datasets*, cap. 3:
   - **Ideea:** compararea fiecărei perechi ar însemna 117k² / 2 ≈ 6,8 miliarde de comparații. În loc de asta, fiecare document primește o **semnătură** de 128 de numere. Fiecare număr e minimul unei funcții hash aplicate pe 3-gramele de cuvinte. Proprietatea-cheie: *probabilitatea ca două semnături să coincidă pe o poziție este exact similaritatea Jaccard a documentelor*.
   - **LSH (benzi):** semnătura se taie în 16 benzi de 8 numere. Documentele care au o bandă identică ajung în aceeași „găleată”, așa că doar ele sunt comparate. Pragul efectiv e ≈ (1/16)^(1/8) ≈ 0,71, apoi verificăm Jaccard ≥ 0,8 pe semnături.
-  - **Union-find** unește perechile în clustere.
-  - **Cost:** O(n · 128 · |shingles|) pentru semnături și O(n · benzi) pentru LSH. Măsurat pe 117k documente: 19 s semnăturile, plus 4 s LSH și union-find.
+  - **Componente conexe:** perechile similare sunt muchiile unui graf, iar un cluster e o componentă conexă a acestui graf (`scipy.sparse.csgraph.connected_components`).
+  - **Cost:** O(n · 128 · |shingles|) pentru semnături și O(n · benzi) pentru LSH. Măsurat pe 117k documente: 19 s semnăturile, plus 4 s LSH și componentele conexe.
   - `shortcut:` fiecare document e comparat doar cu primul membru al găleții. Se pot pierde câteva perechi tranzitive, ceea ce e acceptabil pentru separarea train/test.
 - **Hashing:** `zlib.crc32` pentru shingle-uri, deterministic. `hash()` din Python e randomizat la fiecare rulare.
 

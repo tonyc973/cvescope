@@ -22,30 +22,38 @@ def doc_text(r: dict) -> str:
 
 
 class BM25:
-    """Okapi BM25. The CSC term-document matrix is an inverted index: column t = posting list of term t."""
+    """Okapi BM25:  score(d) = sum over query terms t of  idf(t) * tf * (k1 + 1) / (tf + k1 * (1 - b + b * |d| / avg|d|))
+    where tf = how many times t occurs in document d."""
 
     def __init__(self, texts: list[str], k1: float = 1.5, b: float = 0.75):
-        self.cv = CountVectorizer(stop_words="english", dtype=np.float32)
-        self.tf = self.cv.fit_transform(texts).tocsc()
-        df = np.diff(self.tf.indptr)  # documents containing each term
-        dl = np.asarray(self.tf.sum(axis=1)).ravel()
-        self.idf = np.log(1 + (len(texts) - df + 0.5) / (df + 0.5)).astype(np.float32)
-        self.k1, self.norm = k1, (k1 * (1 - b + b * dl / dl.mean())).astype(np.float32)
-        self.analyze, self.vocab = self.cv.build_analyzer(), self.cv.vocabulary_
+        self.vectorizer = CountVectorizer(stop_words="english", dtype=np.float32)
+        # counts[d, t] = occurrences of term t in document d, stored column by column (CSC):
+        # column t lists exactly the documents that contain t, i.e. CSC is an inverted index
+        self.counts = self.vectorizer.fit_transform(texts).tocsc()
+        docs_with_term = np.diff(self.counts.indptr)
+        doc_len = np.asarray(self.counts.sum(axis=1)).ravel()
+        self.idf = np.log(1 + (len(texts) - docs_with_term + 0.5) / (docs_with_term + 0.5)).astype(np.float32)
+        # the part of the denominator that depends only on the document, computed once
+        self.len_norm = (k1 * (1 - b + b * doc_len / doc_len.mean())).astype(np.float32)
+        self.k1 = k1
 
     def scores(self, query: str) -> np.ndarray:
-        s = np.zeros(self.tf.shape[0], dtype=np.float32)
-        for t in {self.vocab[w] for w in self.analyze(query) if w in self.vocab}:
-            lo, hi = self.tf.indptr[t], self.tf.indptr[t + 1]  # only documents that contain t are touched
-            rows, f = self.tf.indices[lo:hi], self.tf.data[lo:hi]
-            s[rows] += self.idf[t] * f * (self.k1 + 1) / (f + self.norm[rows])
-        return s
+        vocab = self.vectorizer.vocabulary_
+        terms = {vocab[w] for w in self.vectorizer.build_analyzer()(query) if w in vocab}
+        scores = np.zeros(self.counts.shape[0], dtype=np.float32)
+        for t in terms:
+            start, end = self.counts.indptr[t], self.counts.indptr[t + 1]  # term t's slice of the inverted index
+            docs, tf = self.counts.indices[start:end], self.counts.data[start:end]  # which documents, how many times
+            scores[docs] += self.idf[t] * tf * (self.k1 + 1) / (tf + self.len_norm[docs])
+        return scores
 
 
 def top(scores: np.ndarray, mask: np.ndarray, k: int) -> list[int]:
-    s = np.where(mask, scores, -np.inf)
-    idx = np.argpartition(-s, min(k, len(s) - 1))[:k]  # O(n) selection instead of a full sort
-    return [int(i) for i in idx[np.argsort(-s[idx])] if s[i] > 0]
+    """Positions of the k best documents allowed by `mask`, best first; only positive scores count."""
+    scores = np.where(mask, scores, -np.inf)  # filtered-out documents can never win
+    best = np.argpartition(-scores, min(k, len(scores) - 1))[:k]  # the k largest, unordered: O(n), no full sort
+    best = best[np.argsort(-scores[best])]  # sort just those k
+    return [int(i) for i in best if scores[i] > 0]
 
 
 def rrf(runs: list[list[int]], k: int = 60) -> list[tuple[int, float]]:
@@ -63,7 +71,8 @@ class Index:
         self.emb = emb if emb is not None else np.load(EMB)
         assert len(self.emb) == len(self.recs), "embeddings are stale: run `python -m cvescope.search --build`"
         self.bm25 = BM25([doc_text(r) for r in self.recs])
-        self.pos = {r["id"]: i for i, r in enumerate(self.recs)}
+        self.pos = {r["id"]: i for i, r in enumerate(self.recs)}  # CVE id -> row number
+        # one array per filterable field, so a filter is a single vectorized comparison
         self.sev = np.array([(r["cvss"] or {}).get("severity") or "" for r in self.recs])
         self.cls = np.array([r["vuln_class"] or "" for r in self.recs])
         self.kev = np.array([bool(r["kev"]) for r in self.recs])
@@ -99,17 +108,22 @@ class Index:
         return [self.recs[i] | {"score": round(s, 4)} for i, s in rrf(runs)[:k]]
 
     def related(self, cve_id: str, k: int = 5) -> list[dict]:
-        """2-hop graph walk CVE -> {products, CWEs} -> CVEs. A shared product weighs 2, a shared CWE 1."""
-        r = self.recs[self.pos[cve_id]]
+        """2-hop graph walk CVE -> {products, CWEs} -> other CVEs. A shared product weighs 2, a shared CWE 1."""
+        me = self.recs[self.pos[cve_id]]
+        my_nodes = me["products"] + me["cwes"]
         score = Counter()
-        for node in r["products"] + r["cwes"]:
+        for node in my_nodes:
+            weight = 1 if node.startswith("CWE-") else 2  # same product says more than same weakness type
             for j in self.graph[node]:
-                score[j] += 1 if node.startswith("CWE-") else 2
-        score.pop(self.pos[cve_id], None)
-        best = sorted(score, key=lambda j: (-score[j], -(self.recs[j]["epss"] or 0)))[:k]
-        nodes = set(r["products"] + r["cwes"])
-        return [self.recs[j] | {"shared": sorted(nodes & set(self.recs[j]["products"] + self.recs[j]["cwes"]))}
-                for j in best]
+                score[j] += weight
+        score.pop(self.pos[cve_id], None)  # not related to itself
+        best = sorted(score, key=lambda j: (-score[j], -(self.recs[j]["epss"] or 0)))[:k]  # ties: higher EPSS first
+        result = []
+        for j in best:
+            other = self.recs[j]
+            shared = set(my_nodes) & set(other["products"] + other["cwes"])
+            result.append(other | {"shared": sorted(shared)})
+        return result
 
     def stats(self, top_n: int = 10, **filters) -> dict:
         """Aggregates over ALL matching CVEs - answers global questions that top-k retrieval cannot."""
